@@ -9,7 +9,16 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/style.css" />
-  <script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./vendor/three.module.min.js",
+      "three/addons/": "./vendor/addons/",
+      "3d-tiles-renderer": "./vendor/3d-tiles-renderer/index.js",
+      "3d-tiles-renderer/plugins": "./vendor/3d-tiles-renderer/index.plugins.js"
+    }
+  }
+  </script>
 </head>
 <body data-stage="loading">
   <canvas id="scene" aria-label="3D tour of the community and villa"></canvas>
@@ -53,7 +62,13 @@
     </aside>
 
     <button id="street-pin" aria-label="Drop pin on selected street"><b>01</b><i></i></button>
+    <div id="gpins"></div>
   </section>
+
+  <!-- Google Maps attribution (shown only while the live 3D map is on screen) -->
+  <div id="gattr"><img id="gattr-logo" alt="Google" hidden /><b id="gattr-word">Google</b><span id="gattr-text"></span></div>
+  <div id="haze"></div>
+  <div id="toast" role="status"></div>
 
   <!-- 2 · Tour -->
   <section id="tour" class="layer">

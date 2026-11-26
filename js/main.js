@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { makeMaterials, makeSky, buildWorld, Palms, SUN_DIR, HERO_Z, streetX, STREET_COUNT } from './world.js';
 import { buildHeroVilla } from './villa.js';
 import { rr } from './textures.js';
+import { GOOGLE_MAPS_API_KEY, GOOGLE_LOGO_URL } from './config.js';
 
 // ---------------------------------------------------------------------------
 // Data
@@ -76,7 +77,10 @@ const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 12
 scene.fog = new THREE.FogExp2(0xeac39a, 0.00032);
 
 let world, hero, heroPalms, streets, curvePos, curveLook;
+let G = null; // Google 3D aerial (optional)
+const gLook = new THREE.Vector3();
 const state = {
+  view: 'world', // world | google
   stage: 'loading', // pick | fly | tour | prompt | card
   sel: 0, hover: -1,
   s: 0, sTarget: 0,
@@ -290,21 +294,41 @@ function openFinal() {
 // ---------------------------------------------------------------------------
 // Transitions
 // ---------------------------------------------------------------------------
-function flyTo(points, looks, duration, onDone) {
+function flyTo(points, looks, duration, onDone, cam = camera, lookVec = camLook) {
   state.fly = {
+    cam, lookVec,
     pos: new THREE.CatmullRomCurve3(points, false, 'centripetal'),
     look: new THREE.CatmullRomCurve3(looks, false, 'centripetal'),
     t: 0, duration, onDone,
   };
 }
 
-function dropPin() {
+const haze = (on) => new Promise((r) => { document.body.classList.toggle('hazed', on); setTimeout(r, 650); });
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const flyP = (...a) => new Promise((r) => flyTo(a[0], a[1], a[2], r, a[3], a[4]));
+const googleOn = () => G && state.view === 'google';
+
+async function dropPin() {
   if (state.stage !== 'pick') return;
   const st = streets[state.sel];
   const p0 = new THREE.Vector3(), l0 = new THREE.Vector3();
   tourPose(0, p0, l0);
   showStage('fly');
   ui.hint.classList.remove('show');
+  if (googleOn()) {
+    // dive into the real map, then cross into the street-level tour
+    const d = G.divePose(state.sel);
+    const mid = G.camera.position.clone().lerp(d.pos, 0.55); mid.y = Math.max(mid.y * 0.8, d.pos.y + 120);
+    await flyP([G.camera.position.clone(), mid, d.pos], [gLook.clone(), gLook.clone().lerp(d.look, 0.6), d.look], 3.4, G.camera, gLook);
+    await haze(true);
+    state.view = 'world';
+    camera.position.set(st.x + 10, 70, 330); camLook.set(st.x, 0, 160);
+    await wait(120);
+    haze(false);
+    await flyP([camera.position.clone(), V(st.x + 8, 14, 262), p0], [camLook.clone(), V(st.x, 4, 160), l0], 3.0);
+    state.s = state.sTarget = 0; showStage('tour'); ui.hint.classList.add('show');
+    return;
+  }
   flyTo(
     [camera.position.clone(), V(st.x + 40, 90, 360), V(st.x + 8, 14, 262), p0],
     [camLook.clone(), V(st.x, 0, 120), V(st.x, 4, 160), l0],
@@ -313,9 +337,25 @@ function dropPin() {
   );
 }
 
-function backToStreets() {
+async function backToStreets() {
   const from = camera.position.clone();
   showStage('fly');
+  if (G && !G.failed) {
+    flyTo([from, V(from.x, from.y + 30, from.z + 30), V(from.x, 90, from.z + 160)], [camLook.clone(), V(camLook.x, camLook.y + 10, camLook.z), V(from.x, 0, from.z)], 2.2);
+    await wait(1500);
+    await haze(true);
+    state.fly = null;
+    if (!G) { camera.position.copy(AERIAL.pos); camLook.copy(AERIAL.look); haze(false); showStage('pick'); return; }
+    state.view = 'google';
+    const d = G.divePose(state.sel);
+    G.camera.position.copy(d.pos); gLook.copy(d.look);
+    await wait(120);
+    haze(false);
+    const a = G.aerialPose(state.t);
+    await flyP([d.pos.clone(), d.pos.clone().lerp(a.pos, 0.5).add(V(0, 150, 0)), a.pos.clone()], [d.look.clone(), a.look.clone(), a.look.clone()], 3.2, G.camera, gLook);
+    showStage('pick');
+    return;
+  }
   flyTo(
     [from, V(from.x, from.y + 30, from.z + 30), V(AERIAL.pos.x * 0.5 + from.x * 0.5, 150, from.z + 200), AERIAL.pos.clone()],
     [camLook.clone(), V(camLook.x, camLook.y + 10, camLook.z), V(0, 0, 0), AERIAL.look.clone()],
@@ -379,12 +419,12 @@ function pickStreet(cx, cy) {
   return hits.length ? hits[0].object.userData.street : -1;
 }
 canvas.addEventListener('pointermove', (e) => {
-  if (state.stage !== 'pick' || e.pointerType === 'touch') return;
+  if (state.stage !== 'pick' || e.pointerType === 'touch' || googleOn()) return;
   state.hover = pickStreet(e.clientX, e.clientY);
   canvas.style.cursor = state.hover >= 0 ? 'pointer' : '';
 });
 canvas.addEventListener('click', (e) => {
-  if (state.stage !== 'pick') return;
+  if (state.stage !== 'pick' || googleOn()) return;
   const i = pickStreet(e.clientX, e.clientY);
   if (i < 0) return;
   if (i !== state.sel) selectStreet(i);
@@ -415,6 +455,7 @@ addEventListener('resize', () => {
   camera.fov = camera.aspect < 0.8 ? 72 : 55;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
+  G?.resize();
 });
 
 // ---------------------------------------------------------------------------
@@ -458,6 +499,28 @@ function frame() {
   const dt = Math.min(clock.getDelta(), 0.1);
   state.t += dt;
 
+  const gv = !!googleOn();
+  if (gv !== document.body.classList.contains('g-view')) document.body.classList.toggle('g-view', gv);
+  if (googleOn()) {
+    if (state.stage === 'pick') {
+      const a = G.aerialPose(state.t);
+      G.camera.position.lerp(a.pos, 0.03); gLook.lerp(a.look, 0.05);
+    } else if (state.fly && state.fly.cam === G.camera) {
+      const f = state.fly;
+      f.t = Math.min(1, f.t + dt / f.duration);
+      const e = ease(f.t);
+      G.camera.position.copy(f.pos.getPoint(e)); gLook.copy(f.look.getPoint(e));
+      if (f.t >= 1) { state.fly = null; f.onDone?.(); }
+    }
+    G.camera.lookAt(gLook);
+    G.update();
+    updateGooglePins();
+    renderer.toneMapping = THREE.NoToneMapping;
+    renderer.render(G.scene, G.camera);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    requestAnimationFrame(frame);
+    return;
+  }
   if (state.stage === 'pick') {
     const a = state.t * 0.07;
     tmpP.copy(AERIAL.pos).add(V(Math.sin(a) * 30, Math.sin(a * 0.7) * 6, Math.cos(a) * 12));
@@ -467,8 +530,8 @@ function frame() {
     const f = state.fly;
     f.t = Math.min(1, f.t + dt / f.duration);
     const e = ease(f.t);
-    camera.position.copy(f.pos.getPoint(e));
-    camLook.copy(f.look.getPoint(e));
+    f.cam.position.copy(f.pos.getPoint(e));
+    f.lookVec.copy(f.look.getPoint(e));
     if (f.t >= 1) { state.fly = null; f.onDone?.(); }
   } else if (state.stage === 'tour' || state.stage === 'prompt' || state.stage === 'card') {
     state.s += (state.sTarget - state.s) * (1 - Math.exp(-dt * 3.2));
@@ -516,11 +579,77 @@ function updateSunFor(p) {
 }
 
 // ---------------------------------------------------------------------------
+// Google aerial helpers
+// ---------------------------------------------------------------------------
+const gpinsEl = $('#gpins');
+let gPinPos = [], gAttrT = 0;
+function buildGooglePins() {
+  gpinsEl.innerHTML = '';
+  STREETS.forEach((d, i) => {
+    const b = document.createElement('button');
+    b.className = 'gpin';
+    b.innerHTML = `<b>${String(i + 1).padStart(2, '0')}</b><span>${d.name}</span><i></i>`;
+    b.onclick = () => { if (state.stage !== 'pick') return; if (i !== state.sel) selectStreet(i); dropPin(); };
+    b.onmouseenter = () => { if (state.stage === 'pick' && i !== state.sel) selectStreet(i); };
+    gpinsEl.appendChild(b);
+  });
+}
+function updateGooglePins() {
+  if (state.t - gAttrT > 1) {
+    gAttrT = state.t;
+    gPinPos = G.pinPositions();
+    $('#gattr-text').textContent = G.attributions();
+  }
+  [...gpinsEl.children].forEach((el, i) => {
+    const p = gPinPos[i];
+    if (!p) return;
+    _v.copy(p).project(G.camera);
+    const vis = _v.z < 1 && Math.abs(_v.x) < 1.05 && Math.abs(_v.y) < 1.05;
+    el.style.opacity = vis ? 1 : 0;
+    el.style.pointerEvents = vis && state.stage === 'pick' ? 'auto' : 'none';
+    el.classList.toggle('on', i === state.sel);
+    el.style.transform = `translate(${(_v.x * 0.5 + 0.5) * innerWidth}px,${(-_v.y * 0.5 + 0.5) * innerHeight}px) translate(-50%,-100%)`;
+  });
+}
+async function startGoogle() {
+  const qs = new URLSearchParams(location.search);
+  const key = qs.get('gkey') || GOOGLE_MAPS_API_KEY;
+  if (!key || qs.get('google') === '0') return;
+  try {
+    const { createGoogleAerial } = await import('./google.js');
+    G = createGoogleAerial(renderer, key);
+    G.resize();
+    const a = G.aerialPose(0);
+    G.camera.position.copy(a.pos); gLook.copy(a.look);
+    if (GOOGLE_LOGO_URL) { const img = $('#gattr-logo'); img.src = GOOGLE_LOGO_URL; img.hidden = false; $('#gattr-word').hidden = true; }
+    buildGooglePins();
+    state.view = 'google';
+    document.body.dataset.google = '1';
+    // watchdog: fall back to the procedural aerial if tiles never arrive
+    const t0 = performance.now();
+    const check = setInterval(() => {
+      if (G.loadedTiles > 0) { clearInterval(check); return; }
+      if (G.failed || performance.now() - t0 > 20000) {
+        clearInterval(check);
+        console.warn('[google tiles] unavailable — using procedural aerial. Check the API key and that the Map Tiles API is enabled.');
+        G = null; state.view = 'world'; delete document.body.dataset.google;
+        const t = $('#toast'); t.textContent = 'Live 3D map unavailable — showing preview aerial'; t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 5000);
+      }
+    }, 500);
+  } catch (err) {
+    console.warn('[google tiles] failed to start', err);
+    G = null; state.view = 'world';
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
 ui.loaderBar.style.transform = 'scaleX(0.3)';
 requestAnimationFrame(() => setTimeout(() => {
   init();
+  startGoogle();
   window.dispatchEvent(new Event('resize'));
   ui.loaderBar.style.transform = 'scaleX(1)';
   showStage('pick');
@@ -530,4 +659,4 @@ requestAnimationFrame(() => setTimeout(() => {
 }, 30));
 
 // debug hook for automated checks
-window.__tour = { scene, camera, renderer, state, jump: (k) => { state.s = state.sTarget = kToS(k); }, dropPin, TOTAL, kToS };
+window.__tour = { get G() { return G; }, scene, camera, renderer, state, jump: (k) => { state.s = state.sTarget = kToS(k); }, dropPin, TOTAL, kToS };
