@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Choose your villa · Dubai Hills</title>
+  <meta name="description" content="Drop your pin, drive down the street and walk through your future villa — an interactive 3D tour." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+  <script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
+</head>
+<body data-stage="loading">
+  <canvas id="scene" aria-label="3D tour of the community and villa"></canvas>
+
+  <!-- Loader -->
+  <div id="loader">
+    <div class="loader-inner">
+      <p class="eyebrow">Dubai Hills Estate</p>
+      <h2>Preparing your tour</h2>
+      <div class="loader-track"><i id="loader-bar"></i></div>
+    </div>
+  </div>
+
+  <!-- 1 · Pick a street -->
+  <section id="pick" class="layer">
+    <header class="hero-title">
+      <p class="eyebrow">Dubai Hills Estate</p>
+      <h1>Drop your pin</h1>
+    </header>
+
+    <aside id="street-card" class="glass">
+      <div class="card-top">
+        <span class="eyebrow small">Step 1 of 3 · Select a street</span>
+        <div class="arrows">
+          <button id="card-prev" aria-label="Previous street">‹</button>
+          <button id="card-next" aria-label="Next street">›</button>
+        </div>
+      </div>
+      <h3>Choose your street</h3>
+      <div id="street-num">01</div>
+      <p class="left"><i class="live"></i><span id="street-left">6 villas left on this street</span></p>
+      <p id="street-name">Golf Place</p>
+      <div id="street-dots"></div>
+      <dl class="stats">
+        <div><dt>Bedrooms</dt><dd id="stat-beds">6</dd></div>
+        <div><dt>View</dt><dd id="stat-view">Golf</dd></div>
+        <div><dt>Price</dt><dd>On request</dd></div>
+      </dl>
+      <button id="drop-btn" class="ghost-btn"><svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5Z"/></svg><span>Drop your pin</span></button>
+      <p class="fine">Click the streets to drop your pin · scroll to browse</p>
+    </aside>
+
+    <button id="street-pin" aria-label="Drop pin on selected street"><b>01</b><i></i></button>
+  </section>
+
+  <!-- 2 · Tour -->
+  <section id="tour" class="layer">
+    <div id="pins" class="hidden"></div>
+
+    <button id="back-btn" class="glass chip-btn" aria-label="Back to all streets">
+      <svg viewBox="0 0 24 24" width="14" height="14"><path fill="none" stroke="currentColor" stroke-width="2" d="M15 5l-7 7 7 7"/></svg>
+      All streets
+    </button>
+
+    <div id="villa-chip" class="glass">
+      <i class="orange-dot"></i>
+      <div><b id="chip-title">Villa 27 · Golf Place</b><span id="chip-sub">6 bed · 8,531 ft² · On request</span></div>
+    </div>
+
+    <div id="street-pill" class="glass pill">
+      <span class="mouse"><i></i></span>
+      <span>Scroll down the street</span>
+      <span class="prog"><i id="street-progress"></i></span>
+    </div>
+
+    <div id="room">
+      <p id="room-eyebrow" class="eyebrow">Villa 27 · Ground floor</p>
+      <h2 id="room-title">Living room</h2>
+    </div>
+
+    <button id="next-btn" class="glass pill next">
+      <span class="arrow-dot"><svg viewBox="0 0 24 24" width="14" height="14"><path fill="none" stroke="currentColor" stroke-width="2.4" d="M5 12h13M13 6l6 6-6 6"/></svg></span>
+      <span id="next-label">View the dining room</span>
+    </button>
+
+    <nav id="rail" aria-label="Tour progress"></nav>
+
+    <div id="scroll-hint"><span class="mouse"><i></i></span>Scroll to move</div>
+  </section>
+
+  <!-- 3 · Is this your home? -->
+  <section id="prompt" class="layer modal-layer">
+    <div class="glass prompt-box">
+      <h2 id="prompt-title">Is this your home?</h2>
+      <div class="row">
+        <button id="yes-btn" class="btn orange">Yes</button>
+        <button id="no-btn" class="btn grey">No</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 · Welcome home card -->
+  <section id="final" class="layer modal-layer">
+    <article class="final-card">
+      <div class="final-media"><img id="final-img" alt="Villa front elevation" /></div>
+      <div class="final-body">
+        <div class="view-details">
+          <p class="eyebrow orange-t">Welcome home</p>
+          <h2 id="final-title">Villa 27</h2>
+          <p id="final-sub" class="sub">Golf Place Vistas · Dubai Hills</p>
+          <dl class="grid">
+            <div><dt>Bedrooms</dt><dd id="f-beds">6</dd></div>
+            <div><dt>Built-up</dt><dd id="f-built">8,531 ft²</dd></div>
+            <div><dt>View</dt><dd id="f-view">Golf · Burj Khalifa</dd></div>
+            <div><dt>Burj Khalifa</dt><dd id="f-dist">7.95 km</dd></div>
+          </dl>
+          <p class="price">On request <span class="avail"><i></i>Available</span></p>
+          <div class="row">
+            <button id="book-btn" class="btn orange">Book a private viewing</button>
+            <button id="again-btn" class="btn outline">Start again</button>
+          </div>
+        </div>
+        <form id="book-form" class="view-form">
+          <p class="eyebrow orange-t">Private viewing</p>
+          <h3>When can we show you around?</h3>
+          <label>Full name<input name="name" required autocomplete="name" placeholder="Your name" /></label>
+          <label>Email or phone<input name="contact" required autocomplete="email" placeholder="you@example.com" /></label>
+          <label>Preferred date<input id="book-date" name="date" type="date" required /></label>
+          <div class="row">
+            <button type="submit" class="btn orange">Request viewing</button>
+            <button type="button" id="book-cancel" class="btn outline">Back</button>
+          </div>
+        </form>
+        <div class="view-done">
+          <p class="eyebrow orange-t">Request received</p>
+          <h3>Thank you, <span id="booked-name">there</span>.</h3>
+          <p class="sub">A private client advisor will confirm your viewing for <b id="booked-date">soon</b> within the hour.</p>
+          <div class="row"><button class="btn outline" onclick="document.getElementById('again-btn').click()">Explore another street</button></div>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
